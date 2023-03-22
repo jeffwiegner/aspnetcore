@@ -142,7 +142,7 @@ internal sealed partial class WebHost : IWebHost, IAsyncDisposable
         var propagator = _applicationServices.GetRequiredService<DistributedContextPropagator>();
         var httpContextFactory = _applicationServices.GetRequiredService<IHttpContextFactory>();
         var hostingMetrics = _applicationServices.GetRequiredService<HostingMetrics>();
-        var hostingApp = new HostingApplication(application, _logger, diagnosticSource, activitySource, propagator, httpContextFactory, hostingMetrics);
+        var hostingApp = new HostingApplication(application, _logger, diagnosticSource, activitySource, propagator, httpContextFactory, HostingEventSource.Log, hostingMetrics);
         await Server.StartAsync(hostingApp, cancellationToken).ConfigureAwait(false);
         _startedServer = true;
 

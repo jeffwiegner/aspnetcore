@@ -29,6 +29,7 @@ internal sealed class HostingApplicationDiagnostics
     private readonly ActivitySource _activitySource;
     private readonly DiagnosticListener _diagnosticListener;
     private readonly DistributedContextPropagator _propagator;
+    private readonly HostingEventSource _eventSource;
     private readonly HostingMetrics _metrics;
     private readonly ILogger _logger;
 
@@ -37,13 +38,20 @@ internal sealed class HostingApplicationDiagnostics
         DiagnosticListener diagnosticListener,
         ActivitySource activitySource,
         DistributedContextPropagator propagator,
+        HostingEventSource eventSource,
         HostingMetrics metrics)
     {
         _logger = logger;
         _diagnosticListener = diagnosticListener;
         _activitySource = activitySource;
         _propagator = propagator;
+        _eventSource = eventSource;
         _metrics = metrics;
+    }
+
+    private sealed class HttpMetricsTagsFeature : IHttpMetricsTagsFeature
+    {
+        public IList<KeyValuePair<string, object?>> Tags { get; } = new List<KeyValuePair<string, object?>>();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -51,9 +59,18 @@ internal sealed class HostingApplicationDiagnostics
     {
         long startTimestamp = 0;
 
-        if (HostingEventSource.Log.IsEnabled() || _metrics.IsEnabled())
+        if (_eventSource.IsEnabled() || _metrics.IsEnabled())
         {
             context.EventLogEnabled = true;
+            if (httpContext.Features.Get<IHttpMetricsTagsFeature>() is IHttpMetricsTagsFeature feature)
+            {
+                feature.Tags.Clear();
+            }
+            else
+            {
+                context.MetricsTagsFeature ??= new HttpMetricsTagsFeature();
+                httpContext.Features.Set(context.MetricsTagsFeature);
+            }
 
             startTimestamp = Stopwatch.GetTimestamp();
 
@@ -136,6 +153,7 @@ internal sealed class HostingApplicationDiagnostics
             if (context.EventLogEnabled)
             {
                 var routePattern = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRoutePatternDiagnosticsMetadata>()?.RoutePatternText;
+                var customTags = httpContext.Features.Get<IHttpMetricsTagsFeature>()?.Tags;
 
                 _metrics.RequestEnd(
                     httpContext.Request.Protocol,
@@ -144,6 +162,7 @@ internal sealed class HostingApplicationDiagnostics
                     httpContext.Request.Host,
                     routePattern,
                     httpContext.Response.StatusCode,
+                    customTags,
                     startTimestamp,
                     currentTimestamp);
             }
@@ -190,13 +209,13 @@ internal sealed class HostingApplicationDiagnostics
             if (exception != null)
             {
                 // Non-inline
-                HostingEventSource.Log.UnhandledException();
+                _eventSource.UnhandledException();
             }
 
             // Count 500 as failed requests
             if (httpContext.Response.StatusCode >= 500)
             {
-                _metrics.RequestFailed(httpContext.Response.StatusCode);
+                _eventSource.RequestFailed();
             }
         }
 
@@ -205,12 +224,12 @@ internal sealed class HostingApplicationDiagnostics
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ContextDisposed(HostingApplication.Context context, HostingMetrics metrics)
+    public void ContextDisposed(HostingApplication.Context context)
     {
         if (context.EventLogEnabled)
         {
-            metrics.RequestStop();
-            HostingEventSource.Log.RequestStop();
+            _metrics.RequestStop();
+            _eventSource.RequestStop();
         }
     }
 
@@ -331,7 +350,7 @@ internal sealed class HostingApplicationDiagnostics
     private void RecordRequestStartEventLog(HttpContext httpContext)
     {
         _metrics.RequestStart();
-        HostingEventSource.Log.RequestStart(httpContext.Request.Method, httpContext.Request.Path);
+        _eventSource.RequestStart(httpContext.Request.Method, httpContext.Request.Path);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

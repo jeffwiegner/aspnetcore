@@ -17,26 +17,16 @@ internal sealed class HostingMetrics : IDisposable
     private static readonly ConcurrentDictionary<int, object> _statusCodeCache = new ConcurrentDictionary<int, object>();
 
     private readonly Meter _meter;
-    private readonly Counter<long> _totalRequestsCounter;
     private readonly UpDownCounter<long> _currentRequestsCounter;
-    private readonly Counter<long> _failedRequestsCounter;
     private readonly Histogram<double> _requestDuration;
 
     public HostingMetrics(IMeterFactory metricsFactory)
     {
         _meter = metricsFactory.CreateMeter(MeterName);
 
-        _totalRequestsCounter = _meter.CreateCounter<long>(
-            "total-requests",
-            description: "Total Requests");
-
         _currentRequestsCounter = _meter.CreateUpDownCounter<long>(
             "current-requests",
             description: "Current Requests");
-
-        _failedRequestsCounter = _meter.CreateCounter<long>(
-            "failed-requests",
-            description: "Failed Requests");
 
         _requestDuration = _meter.CreateHistogram<double>(
             "request-duration",
@@ -45,11 +35,10 @@ internal sealed class HostingMetrics : IDisposable
 
     public void RequestStart()
     {
-        _totalRequestsCounter.Add(1);
         _currentRequestsCounter.Add(1);
     }
 
-    public void RequestEnd(string protocol, string scheme, string method, HostString host, string? routePattern, int statusCode, long startTimestamp, long currentTimestamp)
+    public void RequestEnd(string protocol, string scheme, string method, HostString host, string? routePattern, int statusCode, IList<KeyValuePair<string, object?>>? customTags, long startTimestamp, long currentTimestamp)
     {
         var duration = new TimeSpan((long)(HostingApplicationDiagnostics.TimestampToTicks * (currentTimestamp - startTimestamp)));
 
@@ -69,6 +58,13 @@ internal sealed class HostingMetrics : IDisposable
         if (routePattern != null)
         {
             tags.Add("route", routePattern);
+        }
+        if (customTags != null)
+        {
+            for (var i = 0; i < customTags.Count; i++)
+            {
+                tags.Add(customTags[i]);
+            }
         }
 
         _requestDuration.Record(duration.TotalMilliseconds, tags);
@@ -92,17 +88,12 @@ internal sealed class HostingMetrics : IDisposable
         _currentRequestsCounter.Add(-1);
     }
 
-    public void RequestFailed(int statusCode)
-    {
-        _failedRequestsCounter.Add(1, new KeyValuePair<string, object?>("status-code", GetBoxedStatusCode(statusCode)));
-    }
-
     public void Dispose()
     {
         _meter.Dispose();
     }
 
-    public bool IsEnabled() => _totalRequestsCounter.Enabled || _currentRequestsCounter.Enabled || _failedRequestsCounter.Enabled;
+    public bool IsEnabled() => _currentRequestsCounter.Enabled || _requestDuration.Enabled;
 
     // Tag accepts object value. Maintain a cache of boxed status codes to avoid allocating for every request.
     private static object GetBoxedStatusCode(int statusCode)

@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics.Metrics;
 using System.Diagnostics.Tracing;
 using System.Runtime.CompilerServices;
 
@@ -11,10 +10,6 @@ internal sealed class HostingEventSource : EventSource
 {
     public static readonly HostingEventSource Log = new HostingEventSource();
 
-    // Used for testing
-    private readonly Meter[]? _meters;
-
-    private MeterListener? _listener;
     private IncrementingPollingCounter? _requestsPerSecondCounter;
     private PollingCounter? _totalRequestsCounter;
     private PollingCounter? _failedRequestsCounter;
@@ -30,10 +25,9 @@ internal sealed class HostingEventSource : EventSource
     }
 
     // Used for testing
-    internal HostingEventSource(string eventSourceName, Meter[]? meters)
+    internal HostingEventSource(string eventSourceName)
         : base(eventSourceName, EventSourceSettings.EtwManifestEventFormat)
     {
-        _meters = meters;
     }
 
     // NOTE
@@ -58,6 +52,8 @@ internal sealed class HostingEventSource : EventSource
     [Event(3, Level = EventLevel.Informational)]
     public void RequestStart(string method, string path)
     {
+        Interlocked.Increment(ref _totalRequests);
+        Interlocked.Increment(ref _currentRequests);
         WriteEvent(3, method, path);
     }
 
@@ -65,6 +61,7 @@ internal sealed class HostingEventSource : EventSource
     [Event(4, Level = EventLevel.Informational)]
     public void RequestStop()
     {
+        Interlocked.Decrement(ref _currentRequests);
         WriteEvent(4);
     }
 
@@ -81,17 +78,18 @@ internal sealed class HostingEventSource : EventSource
         WriteEvent(6);
     }
 
+    [NonEvent]
+    internal void RequestFailed()
+    {
+        Interlocked.Increment(ref _failedRequests);
+    }
+
     protected override void OnEventCommand(EventCommandEventArgs command)
     {
         if (command.Command == EventCommand.Enable)
         {
             // This is the convention for initializing counters in the RuntimeEventSource (lazily on the first enable command).
             // They aren't disabled afterwards...
-
-            if (_listener == null)
-            {
-                StartListener();
-            }
 
             _requestsPerSecondCounter ??= new IncrementingPollingCounter("requests-per-second", this, () => Volatile.Read(ref _totalRequests))
             {
@@ -114,51 +112,5 @@ internal sealed class HostingEventSource : EventSource
                 DisplayName = "Failed Requests"
             };
         }
-    }
-
-    [NonEvent]
-    private void InstrumentPublished(Instrument instrument, MeterListener meterListener)
-    {
-        if (_meters != null && Array.IndexOf(_meters, instrument.Meter) == -1)
-        {
-            return;
-        }
-        if (instrument.Meter.Name != HostingMetrics.MeterName)
-        {
-            return;
-        }
-        switch (instrument.Name)
-        {
-            case "total-requests":
-            case "current-requests":
-            case "failed-requests":
-                meterListener.EnableMeasurementEvents(instrument, this);
-                break;
-        }
-    }
-
-    [NonEvent]
-    private void StartListener()
-    {
-        _listener = new MeterListener();
-        // InstrumentPublished must be a method annotated with [NonEvent] to prevent event source from breaking.
-        _listener.InstrumentPublished = InstrumentPublished;
-        _listener.SetMeasurementEventCallback<long>(static (instrument, measurement, tags, state) =>
-        {
-            var eventSource = (HostingEventSource)state!;
-            switch (instrument.Name)
-            {
-                case "total-requests":
-                    eventSource._totalRequests += measurement;
-                    break;
-                case "current-requests":
-                    eventSource._currentRequests += measurement;
-                    break;
-                case "failed-requests":
-                    eventSource._failedRequests += measurement;
-                    break;
-            }
-        });
-        _listener.Start();
     }
 }

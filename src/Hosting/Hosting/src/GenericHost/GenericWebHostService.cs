@@ -156,7 +156,7 @@ internal sealed partial class GenericWebHostService : IHostedService
             application = ErrorPageBuilder.BuildErrorPageApplication(HostingEnvironment.ContentRootFileProvider, Logger, showDetailedErrors, ex);
         }
 
-        var httpApplication = new HostingApplication(application, Logger, DiagnosticListener, ActivitySource, Propagator, HttpContextFactory, HostingMetrics);
+        var httpApplication = new HostingApplication(application, Logger, DiagnosticListener, ActivitySource, Propagator, HttpContextFactory, HostingEventSource.Log, HostingMetrics);
 
         await Server.StartAsync(httpApplication, cancellationToken);
         HostingEventSource.Log.ServerReady();

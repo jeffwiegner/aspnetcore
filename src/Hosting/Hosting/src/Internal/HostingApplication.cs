@@ -25,11 +25,12 @@ internal sealed class HostingApplication : IHttpApplication<HostingApplication.C
         ActivitySource activitySource,
         DistributedContextPropagator propagator,
         IHttpContextFactory httpContextFactory,
+        HostingEventSource eventSource,
         HostingMetrics metrics)
     {
         _application = application;
         _metrics = metrics;
-        _diagnostics = new HostingApplicationDiagnostics(logger, diagnosticSource, activitySource, propagator, metrics);
+        _diagnostics = new HostingApplicationDiagnostics(logger, diagnosticSource, activitySource, propagator, eventSource, metrics);
         if (httpContextFactory is DefaultHttpContextFactory factory)
         {
             _defaultHttpContextFactory = factory;
@@ -113,7 +114,7 @@ internal sealed class HostingApplication : IHttpApplication<HostingApplication.C
             _httpContextFactory!.Dispose(httpContext);
         }
 
-        HostingApplicationDiagnostics.ContextDisposed(context, _metrics);
+        _diagnostics.ContextDisposed(context);
 
         // Reset the context as it may be pooled
         context.Reset();
@@ -145,6 +146,7 @@ internal sealed class HostingApplication : IHttpApplication<HostingApplication.C
         public bool EventLogEnabled { get; set; }
 
         internal IHttpActivityFeature? HttpActivityFeature;
+        internal IHttpMetricsTagsFeature? MetricsTagsFeature;
 
         public void Reset()
         {

@@ -23,30 +23,13 @@ public class HostingApplicationTests
     public void Metrics()
     {
         // Arrange
-        var measurements = new Dictionary<string, long>();
-        void OnMeasurementRecorded(Instrument instrument, long measurement, ReadOnlySpan<KeyValuePair<string, object>> tags, object state)
-        {
-            measurements.TryGetValue(instrument.Name, out var oldValue);
-            var newValue = oldValue + measurement;
-            measurements[instrument.Name] = newValue;
-            Console.WriteLine($"{instrument.Name} recorded measurement {measurement}. New value {newValue}");
-        }
-
         var metricsFactory = new TestMeterFactory();
         var hostingApplication = CreateApplication(metricsFactory: metricsFactory);
         var httpContext = new DefaultHttpContext();
-        var meter = Assert.Single(metricsFactory.Meters);
+        var meter = metricsFactory.Meters.Single();
 
-        using var meterListener = new MeterListener();
-        meterListener.InstrumentPublished = (instrument, listener) =>
-        {
-            if (instrument.Meter == meter)
-            {
-                listener.EnableMeasurementEvents(instrument);
-            }
-        };
-        meterListener.SetMeasurementEventCallback<long>(OnMeasurementRecorded);
-        meterListener.Start();
+        using var requestDurationRecorder = new InstrumentRecorder<double>(meter, "request-duration");
+        using var currentRequestsRecorder = new InstrumentRecorder<long>(meter, "current-requests");
 
         // Act/Assert
         Assert.Equal(HostingMetrics.MeterName, meter.Name);
@@ -56,37 +39,60 @@ public class HostingApplicationTests
         var context1 = hostingApplication.CreateContext(httpContext.Features);
         context1.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
         hostingApplication.DisposeContext(context1, null);
-        meterListener.RecordObservableInstruments();
 
-        Assert.Equal(1, measurements["total-requests"]);
-        Assert.Equal(0, measurements["current-requests"]);
-        Assert.False(measurements.ContainsKey("failed-requests"));
+        Assert.Collection(currentRequestsRecorder.GetMeasurements(),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value));
+        Assert.Collection(requestDurationRecorder.GetMeasurements(),
+            m => AssertRequestDuration(m, StatusCodes.Status200OK));
 
         // Request 2 (after failure)
         var context2 = hostingApplication.CreateContext(httpContext.Features);
         context2.HttpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         hostingApplication.DisposeContext(context2, null);
-        meterListener.RecordObservableInstruments();
 
-        Assert.Equal(2, measurements["total-requests"]);
-        Assert.Equal(0, measurements["current-requests"]);
-        Assert.Equal(1, measurements["failed-requests"]);
+        Assert.Collection(currentRequestsRecorder.GetMeasurements(),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value));
+        Assert.Collection(requestDurationRecorder.GetMeasurements(),
+            m => AssertRequestDuration(m, StatusCodes.Status200OK),
+            m => AssertRequestDuration(m, StatusCodes.Status500InternalServerError));
 
-        // Request 2
+        // Request 3
         var context3 = hostingApplication.CreateContext(httpContext.Features);
         context3.HttpContext.Response.StatusCode = StatusCodes.Status200OK;
-        meterListener.RecordObservableInstruments();
 
-        Assert.Equal(3, measurements["total-requests"]);
-        Assert.Equal(1, measurements["current-requests"]);
-        Assert.Equal(1, measurements["failed-requests"]);
+        Assert.Collection(currentRequestsRecorder.GetMeasurements(),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value),
+            m => Assert.Equal(1, m.Value));
+        Assert.Collection(requestDurationRecorder.GetMeasurements(),
+            m => AssertRequestDuration(m, StatusCodes.Status200OK),
+            m => AssertRequestDuration(m, StatusCodes.Status500InternalServerError));
 
         hostingApplication.DisposeContext(context3, null);
-        meterListener.RecordObservableInstruments();
 
-        Assert.Equal(3, measurements["total-requests"]);
-        Assert.Equal(0, measurements["current-requests"]);
-        Assert.Equal(1, measurements["failed-requests"]);
+        Assert.Collection(currentRequestsRecorder.GetMeasurements(),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value),
+            m => Assert.Equal(1, m.Value),
+            m => Assert.Equal(-1, m.Value));
+        Assert.Collection(requestDurationRecorder.GetMeasurements(),
+            m => AssertRequestDuration(m, StatusCodes.Status200OK),
+            m => AssertRequestDuration(m, StatusCodes.Status500InternalServerError),
+            m => AssertRequestDuration(m, StatusCodes.Status200OK));
+
+        static void AssertRequestDuration(Measurement<double> measurement, int statusCode)
+        {
+            Assert.True(measurement.Value > 0);
+            Assert.Equal(statusCode, (int)measurement.Tags.Single(t => t.Key == "status-code").Value);
+        }
     }
 
     [Fact]
@@ -274,6 +280,7 @@ public class HostingApplicationTests
             activitySource ?? new ActivitySource("Microsoft.AspNetCore"),
             DistributedContextPropagator.CreateDefaultPropagator(),
             httpContextFactory,
+            HostingEventSource.Log,
             new HostingMetrics(metricsFactory ?? new TestMeterFactory()));
 
         return hostingApplication;

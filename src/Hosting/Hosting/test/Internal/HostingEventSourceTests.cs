@@ -6,9 +6,9 @@ using System.Diagnostics.Tracing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Internal;
 using Microsoft.Extensions.Metrics;
-using System.Diagnostics.Metrics;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Hosting.Fakes;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.AspNetCore.Hosting;
 
@@ -178,7 +178,7 @@ public class HostingEventSourceTests
     }
 
     [Fact]
-    public async Task VerifyEventSourceCountersFireWithCorrectValues()
+    public async Task VerifyCountersFireWithCorrectValues()
     {
         // Arrange
         var eventListener = new TestCounterListener(new[]
@@ -189,17 +189,9 @@ public class HostingEventSourceTests
             "failed-requests"
         });
 
-        // Simulate metrics from two hosts
-        var meterFactory1 = new TestMeterFactory();
-        var hostingMetrics1 = new HostingMetrics(meterFactory1);
+        var hostingEventSource = GetHostingEventSource();
 
-        var meterFactory2 = new TestMeterFactory();
-        var hostingMetrics2 = new HostingMetrics(meterFactory2);
-
-        var hostingEventSource = GetHostingEventSource(meterFactory1.Meters.Concat(meterFactory2.Meters).ToArray());
-
-        var timeout = !Debugger.IsAttached ? TimeSpan.FromSeconds(30) : Timeout.InfiniteTimeSpan;
-        using CancellationTokenSource timeoutTokenSource = new CancellationTokenSource(timeout);
+        using var timeoutTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         var rpsValues = eventListener.GetCounterValues("requests-per-second", timeoutTokenSource.Token).GetAsyncEnumerator();
         var totalRequestValues = eventListener.GetCounterValues("total-requests", timeoutTokenSource.Token).GetAsyncEnumerator();
@@ -209,47 +201,42 @@ public class HostingEventSourceTests
         eventListener.EnableEvents(hostingEventSource, EventLevel.Informational, EventKeywords.None,
             new Dictionary<string, string>
             {
-                { "EventCounterIntervalSec", "1" }
+                    { "EventCounterIntervalSec", "1" }
             });
 
         // Act & Assert
-        hostingMetrics1.RequestStart();
-        hostingMetrics2.RequestStart();
+        hostingEventSource.RequestStart("GET", "/");
 
-        Assert.Equal(2, await totalRequestValues.FirstOrDefault(v => v == 2));
-        Assert.Equal(2, await rpsValues.FirstOrDefault(v => v == 2));
-        Assert.Equal(2, await currentRequestValues.FirstOrDefault(v => v == 2));
+        Assert.Equal(1, await totalRequestValues.FirstOrDefault(v => v == 1));
+        Assert.Equal(1, await rpsValues.FirstOrDefault(v => v == 1));
+        Assert.Equal(1, await currentRequestValues.FirstOrDefault(v => v == 1));
         Assert.Equal(0, await failedRequestValues.FirstOrDefault(v => v == 0));
 
-        hostingMetrics1.RequestStop();
-        hostingMetrics2.RequestStop();
+        hostingEventSource.RequestStop();
 
-        Assert.Equal(2, await totalRequestValues.FirstOrDefault(v => v == 2));
+        Assert.Equal(1, await totalRequestValues.FirstOrDefault(v => v == 1));
         Assert.Equal(0, await rpsValues.FirstOrDefault(v => v == 0));
         Assert.Equal(0, await currentRequestValues.FirstOrDefault(v => v == 0));
         Assert.Equal(0, await failedRequestValues.FirstOrDefault(v => v == 0));
 
-        hostingMetrics1.RequestStart();
-        hostingMetrics2.RequestStart();
+        hostingEventSource.RequestStart("POST", "/");
 
-        Assert.Equal(4, await totalRequestValues.FirstOrDefault(v => v == 4));
-        Assert.Equal(2, await rpsValues.FirstOrDefault(v => v == 2));
-        Assert.Equal(2, await currentRequestValues.FirstOrDefault(v => v == 2));
+        Assert.Equal(2, await totalRequestValues.FirstOrDefault(v => v == 2));
+        Assert.Equal(1, await rpsValues.FirstOrDefault(v => v == 1));
+        Assert.Equal(1, await currentRequestValues.FirstOrDefault(v => v == 1));
         Assert.Equal(0, await failedRequestValues.FirstOrDefault(v => v == 0));
 
-        hostingMetrics1.RequestFailed(StatusCodes.Status500InternalServerError);
-        hostingMetrics2.RequestFailed(StatusCodes.Status500InternalServerError);
-        hostingMetrics1.RequestStop();
-        hostingMetrics2.RequestStop();
+        hostingEventSource.RequestFailed();
+        hostingEventSource.RequestStop();
 
-        Assert.Equal(4, await totalRequestValues.FirstOrDefault(v => v == 4));
+        Assert.Equal(2, await totalRequestValues.FirstOrDefault(v => v == 2));
         Assert.Equal(0, await rpsValues.FirstOrDefault(v => v == 0));
         Assert.Equal(0, await currentRequestValues.FirstOrDefault(v => v == 0));
-        Assert.Equal(2, await failedRequestValues.FirstOrDefault(v => v == 2));
+        Assert.Equal(1, await failedRequestValues.FirstOrDefault(v => v == 1));
     }
 
-    private static HostingEventSource GetHostingEventSource(Meter[] meters = null)
+    private static HostingEventSource GetHostingEventSource()
     {
-        return new HostingEventSource(Guid.NewGuid().ToString(), meters);
+        return new HostingEventSource(Guid.NewGuid().ToString());
     }
 }
