@@ -54,7 +54,7 @@ internal sealed class SlimWebHostBuilder : WebHostBuilderBase, ISupportsStartup
             services.TryAddScoped<IMiddlewareFactory, MiddlewareFactory>();
             services.TryAddSingleton<IApplicationBuilderFactory, ApplicationBuilderFactory>();
 
-            services.AddMeters();
+            services.AddMetrics();
             services.TryAddSingleton<HostingMetrics>();
         });
     }

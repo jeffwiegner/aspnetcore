@@ -9,9 +9,9 @@ namespace Microsoft.AspNetCore.Hosting.Abstractions.MetricsPrototype;
 
 internal sealed class DefaultMeterFactory : IMeterFactory
 {
-    private readonly IOptions<MeterFactoryOptions> _options;
+    private readonly IOptions<MetricsOptions> _options;
 
-    public DefaultMeterFactory(IOptions<MeterFactoryOptions> options)
+    public DefaultMeterFactory(IOptions<MetricsOptions> options)
     {
         _options = options;
     }

@@ -294,7 +294,7 @@ public class WebHostBuilder : IWebHostBuilder
         services.AddOptions();
         services.AddLogging();
 
-        services.AddMeters();
+        services.AddMetrics();
         services.TryAddSingleton<HostingMetrics>();
 
         services.AddTransient<IServiceProviderFactory<IServiceCollection>, DefaultServiceProviderFactory>();

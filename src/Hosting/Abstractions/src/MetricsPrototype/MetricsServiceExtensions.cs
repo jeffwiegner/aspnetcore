@@ -9,9 +9,9 @@ namespace Microsoft.Extensions.DependencyInjection;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 #pragma warning disable RS0016 // Add public types and members to the declared API
-public static class MeterServiceExtensions
+public static class MetricsServiceExtensions
 {
-    public static IServiceCollection AddMeters(this IServiceCollection services)
+    public static IServiceCollection AddMetrics(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -20,14 +20,20 @@ public static class MeterServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddMeters(this IServiceCollection services, Action<MeterFactoryOptions> configure)
+    public static IServiceCollection AddMetrics(this IServiceCollection services, Action<IMetricsBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddMeters();
-        services.Configure(configure);
+        services.AddMetrics();
+        configure(new MetricsBuilder(services));
 
         return services;
+    }
+
+    public static IMetricsBuilder AddDefaultTag(this IMetricsBuilder builder, string name, object? value)
+    {
+        builder.Services.Configure<MetricsOptions>(o => o.DefaultTags.Add(new KeyValuePair<string, object?>(name, value)));
+        return builder;
     }
 }
 #pragma warning restore RS0016 // Add public types and members to the declared API
