@@ -61,7 +61,7 @@ internal sealed class HostingApplicationDiagnostics
 
         if (_eventSource.IsEnabled() || _metrics.IsEnabled())
         {
-            context.EventLogEnabled = true;
+            context.EventLogOrMetricsEnabled = true;
             if (httpContext.Features.Get<IHttpMetricsTagsFeature>() is IHttpMetricsTagsFeature feature)
             {
                 feature.Tags.Clear();
@@ -150,7 +150,7 @@ internal sealed class HostingApplicationDiagnostics
             // Non-inline
             LogRequestFinished(context, startTimestamp, currentTimestamp);
 
-            if (context.EventLogEnabled)
+            if (context.EventLogOrMetricsEnabled)
             {
                 var routePattern = httpContext.GetEndpoint()?.Metadata.GetMetadata<IRoutePatternDiagnosticsMetadata>()?.RoutePatternText;
                 var customTags = httpContext.Features.Get<IHttpMetricsTagsFeature>()?.Tags;
@@ -204,7 +204,7 @@ internal sealed class HostingApplicationDiagnostics
             StopActivity(httpContext, activity, context.HasDiagnosticListener);
         }
 
-        if (context.EventLogEnabled)
+        if (context.EventLogOrMetricsEnabled)
         {
             if (exception != null)
             {
@@ -226,7 +226,7 @@ internal sealed class HostingApplicationDiagnostics
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ContextDisposed(HostingApplication.Context context)
     {
-        if (context.EventLogEnabled)
+        if (context.EventLogOrMetricsEnabled)
         {
             _metrics.RequestStop();
             _eventSource.RequestStop();
