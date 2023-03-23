@@ -24,12 +24,13 @@ public class HostingApplicationTests
     {
         // Arrange
         var metricsFactory = new TestMeterFactory();
+        var meterRegistry = new TestMeterRegistry(metricsFactory.Meters);
         var hostingApplication = CreateApplication(metricsFactory: metricsFactory);
         var httpContext = new DefaultHttpContext();
         var meter = metricsFactory.Meters.Single();
 
-        using var requestDurationRecorder = new InstrumentRecorder<double>(meter, "request-duration");
-        using var currentRequestsRecorder = new InstrumentRecorder<long>(meter, "current-requests");
+        using var requestDurationRecorder = new InstrumentRecorder<double>(meterRegistry, "request-duration");
+        using var currentRequestsRecorder = new InstrumentRecorder<long>(meterRegistry, "current-requests");
 
         // Act/Assert
         Assert.Equal(HostingMetrics.MeterName, meter.Name);
@@ -91,7 +92,7 @@ public class HostingApplicationTests
         static void AssertRequestDuration(Measurement<double> measurement, int statusCode)
         {
             Assert.True(measurement.Value > 0);
-            Assert.Equal(statusCode, (int)measurement.Tags.Single(t => t.Key == "status-code").Value);
+            Assert.Equal(statusCode, (int) measurement.Tags.ToArray().Single(t => t.Key == "status-code").Value);
         }
     }
 

@@ -36,5 +36,37 @@ public interface IMeterFactory
     Meter CreateMeter(string name);
     Meter CreateMeter(MeterOptions options);
 }
+
+public interface IMeterRegistry
+{
+    void Add(Meter meter);
+    bool Contains(Meter meter);
+}
+
+internal sealed class DefaultMeterRegistry : IMeterRegistry
+{
+    private readonly object _lock = new object();
+    private readonly List<Meter> _meters = new List<Meter>();
+
+    public void Add(Meter meter)
+    {
+        lock (_lock)
+        {
+            _meters.Add(meter);
+        }
+    }
+
+    public bool Contains(Meter meter)
+    {
+        lock (_lock)
+        {
+            return _meters.Contains(meter);
+        }
+    }
+}
+
+//public interface InstrumentRecorderFactory
+//{
+//}
 #pragma warning restore RS0016 // Add public types and members to the declared API
 #pragma warning restore CS1591 // Missing XML comment for publicly visible type or member

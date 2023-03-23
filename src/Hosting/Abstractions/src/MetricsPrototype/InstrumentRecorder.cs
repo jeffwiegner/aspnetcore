@@ -3,20 +3,10 @@
 
 using System.Diagnostics.Metrics;
 
-namespace Microsoft.AspNetCore.Hosting;
+namespace Microsoft.Extensions.Metrics;
 
-public readonly struct Measurement<T>
-{
-    public Measurement(T value, ReadOnlySpan<KeyValuePair<string, object>> tags)
-    {
-        Value = value;
-        Tags = tags.ToArray();
-    }
-
-    public T Value { get; }
-    public IReadOnlyList<KeyValuePair<string, object>> Tags { get; }
-}
-
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+#pragma warning disable RS0016 // Add public types and members to the declared API
 public sealed class InstrumentRecorder<T> : IDisposable where T : struct
 {
     private readonly object _lock = new object();
@@ -25,23 +15,23 @@ public sealed class InstrumentRecorder<T> : IDisposable where T : struct
     private readonly MeterListener _meterListener;
     private readonly List<Measurement<T>> _values;
 
-    public InstrumentRecorder(Meter meter, string instrumentName)
+    public InstrumentRecorder(IMeterRegistry registry, string instrumentName, object? state = null)
     {
         _instrumentName = instrumentName;
         _values = new List<Measurement<T>>();
         _meterListener = new MeterListener();
         _meterListener.InstrumentPublished = (instrument, listener) =>
         {
-            if (instrument.Meter == meter && instrument.Name == _instrumentName)
+            if (registry.Contains(instrument.Meter) && instrument.Name == _instrumentName)
             {
-                listener.EnableMeasurementEvents(instrument);
+                listener.EnableMeasurementEvents(instrument, state);
             }
         };
         _meterListener.SetMeasurementEventCallback<T>(OnMeasurementRecorded);
         _meterListener.Start();
     }
 
-    private void OnMeasurementRecorded(Instrument instrument, T measurement, ReadOnlySpan<KeyValuePair<string, object>> tags, object state)
+    private void OnMeasurementRecorded(Instrument instrument, T measurement, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
     {
         lock (_lock)
         {
@@ -62,3 +52,5 @@ public sealed class InstrumentRecorder<T> : IDisposable where T : struct
         _meterListener.Dispose();
     }
 }
+#pragma warning restore RS0016 // Add public types and members to the declared API
+#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member

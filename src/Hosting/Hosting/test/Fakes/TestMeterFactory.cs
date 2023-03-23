@@ -24,3 +24,21 @@ public class TestMeterFactory : IMeterFactory
         return meter;
     }
 }
+
+public class TestMeterRegistry : IMeterRegistry
+{
+    private readonly List<Meter> _meters;
+
+    public TestMeterRegistry() : this(new List<Meter>())
+    {
+    }
+
+    public TestMeterRegistry(List<Meter> meters)
+    {
+        _meters = meters;
+    }
+
+    public void Add(Meter meter) => _meters.Add(meter);
+
+    public bool Contains(Meter meter) => _meters.Contains(meter);
+}
