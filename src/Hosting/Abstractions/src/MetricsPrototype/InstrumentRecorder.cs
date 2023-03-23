@@ -10,19 +10,20 @@ namespace Microsoft.Extensions.Metrics;
 public sealed class InstrumentRecorder<T> : IDisposable where T : struct
 {
     private readonly object _lock = new object();
-
+    private readonly string _meterName;
     private readonly string _instrumentName;
     private readonly MeterListener _meterListener;
     private readonly List<Measurement<T>> _values;
 
-    public InstrumentRecorder(IMeterRegistry registry, string instrumentName, object? state = null)
+    public InstrumentRecorder(IMeterRegistry registry, string meterName, string instrumentName, object? state = null)
     {
+        _meterName = meterName;
         _instrumentName = instrumentName;
         _values = new List<Measurement<T>>();
         _meterListener = new MeterListener();
         _meterListener.InstrumentPublished = (instrument, listener) =>
         {
-            if (registry.Contains(instrument.Meter) && instrument.Name == _instrumentName)
+            if (instrument.Meter.Name == _meterName && registry.Contains(instrument.Meter) && instrument.Name == _instrumentName)
             {
                 listener.EnableMeasurementEvents(instrument, state);
             }

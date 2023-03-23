@@ -29,8 +29,8 @@ public class HostingApplicationTests
         var httpContext = new DefaultHttpContext();
         var meter = metricsFactory.Meters.Single();
 
-        using var requestDurationRecorder = new InstrumentRecorder<double>(meterRegistry, "request-duration");
-        using var currentRequestsRecorder = new InstrumentRecorder<long>(meterRegistry, "current-requests");
+        using var requestDurationRecorder = new InstrumentRecorder<double>(meterRegistry, "Microsoft.AspNetCore.Hosting", "request-duration");
+        using var currentRequestsRecorder = new InstrumentRecorder<long>(meterRegistry, "Microsoft.AspNetCore.Hosting", "current-requests");
 
         // Act/Assert
         Assert.Equal(HostingMetrics.MeterName, meter.Name);
