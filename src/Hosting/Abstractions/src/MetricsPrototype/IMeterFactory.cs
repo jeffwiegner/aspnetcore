@@ -43,7 +43,7 @@ public interface IMeterRegistry
     bool Contains(Meter meter);
 }
 
-internal sealed class DefaultMeterRegistry : IMeterRegistry
+internal sealed class DefaultMeterRegistry : IMeterRegistry, IDisposable
 {
     private readonly object _lock = new object();
     private readonly List<Meter> _meters = new List<Meter>();
@@ -63,10 +63,18 @@ internal sealed class DefaultMeterRegistry : IMeterRegistry
             return _meters.Contains(meter);
         }
     }
-}
 
-//public interface InstrumentRecorderFactory
-//{
-//}
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            foreach (var meter in _meters)
+            {
+                meter.Dispose();
+            }
+            _meters.Clear();
+        }
+    }
+}
 #pragma warning restore RS0016 // Add public types and members to the declared API
 #pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
