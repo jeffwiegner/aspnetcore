@@ -36,7 +36,8 @@ public static class RazorComponentsServiceCollectionExtensions
         // Common services required for components server side rendering
         services.TryAddSingleton<ServerComponentSerializer>(services => new ServerComponentSerializer(services.GetRequiredService<IDataProtectionProvider>()));
         services.TryAddSingleton<WebAssemblyComponentSerializer>();
-        services.TryAddScoped<IComponentPrerenderer, ComponentPrerenderer>();
+        services.TryAddScoped<ComponentPrerenderer>();
+        services.TryAddScoped<IComponentPrerenderer>(services => services.GetRequiredService<ComponentPrerenderer>());
         services.TryAddScoped<HtmlRenderer>();
         services.TryAddScoped<NavigationManager, HttpNavigationManager>();
         services.TryAddScoped<IJSRuntime, UnsupportedJavaScriptRuntime>();

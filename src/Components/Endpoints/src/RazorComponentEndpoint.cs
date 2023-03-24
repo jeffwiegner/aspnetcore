@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Text;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +24,7 @@ internal static class RazorComponentEndpoint
         Type componentType,
         IReadOnlyDictionary<string, object?>? componentParameters)
     {
-        var componentPrerenderer = httpContext.RequestServices.GetRequiredService<IComponentPrerenderer>();
+        var componentPrerenderer = httpContext.RequestServices.GetRequiredService<ComponentPrerenderer>();
         return componentPrerenderer.Dispatcher.InvokeAsync(async () =>
         {
             // We could pool these dictionary instances if we wanted, and possibly even the ParameterView
@@ -51,6 +52,18 @@ internal static class RazorComponentEndpoint
             // response asynchronously. In the absence of this line, the buffer gets synchronously written to the
             // response as part of the Dispose which has a perf impact.
             await writer.FlushAsync();
+
+            // Don't complete the response until quiescence. Stream batches in the meantime.
+            await componentPrerenderer.WaitForQuiescenceAsync(updatedComponent =>
+            {
+                // This relies on the component producing well-formed markup (i.e., it can't have a closing
+                // </template> at the top level without a preceding matching <template>). Alternatively we
+                // could look at using a custom TextWriter that does some extra encoding of all the content
+                // as it is being written out.
+                writer.Write($"<template component-id=\"{ updatedComponent.ComponentId }\">");
+                updatedComponent.WriteHtmlTo(writer);
+                writer.Write("</template>");
+            });
         });
     }
 

@@ -4,6 +4,7 @@
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Infrastructure;
+using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.DataProtection;
@@ -111,6 +112,9 @@ internal sealed class ComponentPrerenderer : IComponentPrerenderer
         return new ComponentStateHtmlContent(store);
     }
 
+    public Task WaitForQuiescenceAsync(Action<HtmlComponent> onRenderBatchCallback)
+        => _htmlRenderer.WaitForQuiescenceAsync(onRenderBatchCallback);
+
     private async ValueTask<HtmlComponent> PrerenderComponentCoreAsync(
         ParameterView parameters,
         HttpContext httpContext,
@@ -118,8 +122,8 @@ internal sealed class ComponentPrerenderer : IComponentPrerenderer
     {
         try
         {
-            return await _htmlRenderer.Dispatcher.InvokeAsync(() =>
-                _htmlRenderer.RenderComponentAsync(componentType, parameters));
+            return await _htmlRenderer.Dispatcher.InvokeAsync(async () =>
+                _htmlRenderer.BeginRenderingComponent(componentType, parameters));
         }
         catch (NavigationException navigationException)
         {

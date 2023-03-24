@@ -8,30 +8,26 @@ namespace Microsoft.AspNetCore.Components.Web;
 /// <summary>
 /// Represents the output of rendering a component as HTML. The content can change if the component instance re-renders.
 /// </summary>
-public sealed class HtmlComponent
+public class HtmlComponent
 {
     private readonly HtmlRendererCore? _renderer;
     private readonly int _componentId;
-    private readonly Task _quiescenceTask;
 
-    internal HtmlComponent(HtmlRendererCore? renderer, int componentId, Task quiescenceTask)
+    internal HtmlComponent(HtmlRendererCore? renderer, int componentId)
     {
         _renderer = renderer;
         _componentId = componentId;
-        _quiescenceTask = quiescenceTask;
     }
 
     /// <summary>
     /// Gets an instance of <see cref="HtmlComponent"/> that produces no content.
     /// </summary>
-    public static HtmlComponent Empty { get; } = new HtmlComponent(null, 0, Task.CompletedTask);
+    public static HtmlComponent Empty { get; } = new HtmlComponent(null, 0);
 
     /// <summary>
-    /// Obtains a <see cref="Task"/> that completes when the component hierarchy has completed asynchronous tasks such as loading.
+    /// Gets the component ID.
     /// </summary>
-    /// <returns>A <see cref="Task"/> that completes when the component hierarchy has completed asynchronous tasks such as loading.</returns>
-    public Task WaitForQuiescenceAsync()
-        => _quiescenceTask;
+    public int ComponentId => _componentId;
 
     /// <summary>
     /// Returns an HTML string representation of the component's latest output.

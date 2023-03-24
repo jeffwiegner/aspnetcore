@@ -12,6 +12,9 @@ namespace Microsoft.AspNetCore.Components.HtmlRendering;
 internal sealed class HtmlRendererCore : Renderer
 {
     private static readonly Task CanceledRenderTask = Task.FromCanceled(new CancellationToken(canceled: true));
+    private Action<HtmlComponent>? _onComponentUpdated;
+
+    private Task? _combinedQuiescenceTask;
 
     public HtmlRendererCore(IServiceProvider serviceProvider, ILoggerFactory loggerFactory, IComponentActivator componentActivator)
         : base(serviceProvider, loggerFactory, componentActivator)
@@ -20,7 +23,7 @@ internal sealed class HtmlRendererCore : Renderer
 
     public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
 
-    public HtmlComponent BeginRenderingComponentAsync(
+    public HtmlRootComponent BeginRenderingComponentAsync(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.All)] Type componentType,
         ParameterView initialParameters)
     {
@@ -33,7 +36,16 @@ internal sealed class HtmlRendererCore : Renderer
             ExceptionDispatchInfo.Capture(quiescenceTask.Exception.InnerException ?? quiescenceTask.Exception).Throw();
         }
 
-        return new HtmlComponent(this, componentId, quiescenceTask);
+        if (_combinedQuiescenceTask is null)
+        {
+            _combinedQuiescenceTask = quiescenceTask;
+        }
+        else
+        {
+            _combinedQuiescenceTask = Task.WhenAll(_combinedQuiescenceTask, quiescenceTask);
+        }
+
+        return new HtmlRootComponent(this, componentId, quiescenceTask);
     }
 
     protected override void HandleException(Exception exception)
@@ -41,6 +53,16 @@ internal sealed class HtmlRendererCore : Renderer
 
     protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
     {
+        if (_onComponentUpdated is not null)
+        {
+            var numUpdatedComponents = renderBatch.UpdatedComponents.Count;
+            for (var i = 0; i < numUpdatedComponents; i++)
+            {
+                ref var diff = ref renderBatch.UpdatedComponents.Array[i];
+                _onComponentUpdated(new HtmlComponent(this, diff.ComponentId));
+            }
+        }
+
         // By default we return a canceled task. This has the effect of making it so that the
         // OnAfterRenderAsync callbacks on components don't run by default.
         // This way, by default prerendering gets the correct behavior and other renderers
@@ -59,4 +81,21 @@ internal sealed class HtmlRendererCore : Renderer
 
     internal new ArrayRange<RenderTreeFrame> GetCurrentRenderTreeFrames(int componentId)
         => base.GetCurrentRenderTreeFrames(componentId);
+
+    public Task WaitForQuiescenceAsync(Action<HtmlComponent> onComponentUpdated)
+    {
+        Dispatcher.AssertAccess();
+
+        if (_onComponentUpdated is not null)
+        {
+            // TODO: Support multiple
+            // Or better still, make this API internal and then we can just choose not to support multiple
+            // since it's not a usage pattern required by the framework.
+            throw new InvalidOperationException($"{nameof(_onComponentUpdated)} is already set.");
+        }
+
+        _onComponentUpdated = onComponentUpdated;
+
+        return _combinedQuiescenceTask ?? Task.CompletedTask;
+    }
 }
